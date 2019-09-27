@@ -34,11 +34,26 @@ public class HeaderExchanger implements Exchanger {
 
     public static final String NAME = "header";
 
+    /**
+     * 通过 Transporters#connect(url, handler) 方法，创建通信 Client ，内嵌到 HeaderExchangeClient 中。
+     * @param url
+     * @param handler
+     * @return
+     * @throws RemotingException
+     */
     @Override
     public ExchangeClient connect(URL url, ExchangeHandler handler) throws RemotingException {
         return new HeaderExchangeClient(Transporters.connect(url, new DecodeHandler(new HeaderExchangeHandler(handler))), true);
     }
 
+    /**
+     * 传入的 handler 处理器，内嵌到 HeaderExchangeHandler ，再进一步内嵌到 DecodeHandler 中。
+     * 所以，处理器的顺序是：DecodeHandler => HeaderExchangeHandler => ExchangeHandler( handler ) 。
+     * @param url
+     * @param handler
+     * @return
+     * @throws RemotingException
+     */
     @Override
     public ExchangeServer bind(URL url, ExchangeHandler handler) throws RemotingException {
         return new HeaderExchangeServer(Transporters.bind(url, new DecodeHandler(new HeaderExchangeHandler(handler))));

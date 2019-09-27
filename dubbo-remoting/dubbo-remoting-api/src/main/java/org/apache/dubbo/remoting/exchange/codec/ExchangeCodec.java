@@ -42,11 +42,14 @@ import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * ExchangeCodec.
+ * ExchangeCodec.非常重要。
+ * 基于消息长度的方式，做每条消息的粘包拆包处理。
+ * 和我们在 《精尽 Dubbo 源码分析 —— NIO 服务器（二）之 Transport 层》 中，看到 Telnet 协议，
+ * 基于特定字符的方式，做每条命令的粘包拆包处理不同。
  */
 public class ExchangeCodec extends TelnetCodec {
 
-    // header length.
+    // header length. Header 总长度，16 Bytes = 128 Bits 。
     protected static final int HEADER_LENGTH = 16;
     // magic header.
     protected static final short MAGIC = (short) 0xdabb;
@@ -65,33 +68,45 @@ public class ExchangeCodec extends TelnetCodec {
 
     @Override
     public void encode(Channel channel, ChannelBuffer buffer, Object msg) throws IOException {
+        // 请求
         if (msg instanceof Request) {
             encodeRequest(channel, buffer, (Request) msg);
-        } else if (msg instanceof Response) {
+        }
+        // 响应
+        else if (msg instanceof Response) {
             encodeResponse(channel, buffer, (Response) msg);
-        } else {
+        }
+        // 提交给父类( Telnet ) 处理，目前是 Telnet 命令的结果。
+        else {
             super.encode(channel, buffer, msg);
         }
     }
 
     @Override
     public Object decode(Channel channel, ChannelBuffer buffer) throws IOException {
+        // 读取 header 数组。注意，这里的 Math.min(readable, HEADER_LENGTH) ，优先考虑解析 Dubbo 协议。
         int readable = buffer.readableBytes();
         byte[] header = new byte[Math.min(readable, HEADER_LENGTH)];
         buffer.readBytes(header);
+        // 解码
         return decode(channel, buffer, readable, header);
     }
 
     @Override
     protected Object decode(Channel channel, ChannelBuffer buffer, int readable, byte[] header) throws IOException {
         // check magic number.
+        // 非 Dubbo 协议，目前是 Telnet 命令。
         if (readable > 0 && header[0] != MAGIC_HIGH
                 || readable > 1 && header[1] != MAGIC_LOW) {
+            // 将 Buffer 完全复制到 header 数组中。因为，上面的 #decode(channel, buffer) 方法，可能未读全。
+            // 因为，【第 3 至 6 行】，是以 Dubbo 协议 为优先考虑解码的。
             int length = header.length;
             if (header.length < readable) {
                 header = Bytes.copyOf(header, readable);
                 buffer.readBytes(header, length, readable - length);
             }
+
+            // fixme 【TODO 8026 】header[i] == MAGIC_HIGH && header[i + 1] == MAGIC_LOW ？搞不懂？
             for (int i = 1; i < header.length - 1; i++) {
                 if (header[i] == MAGIC_HIGH && header[i + 1] == MAGIC_LOW) {
                     buffer.readerIndex(buffer.readerIndex() - header.length + i);
@@ -99,28 +114,38 @@ public class ExchangeCodec extends TelnetCodec {
                     break;
                 }
             }
+
+            // 调用 Telnet#decode(channel, buffer, readable, header) 方法，解码 Telnet 。
+            // 在 《精尽 Dubbo 源码分析 —— NIO 服务器（三）之 Telnet 层》 有详细解析。
             return super.decode(channel, buffer, readable, header);
         }
+        // Header 长度不够，返回需要更多的输入
+        // 基于消息长度的方式，拆包。
         // check length.
         if (readable < HEADER_LENGTH) {
             return DecodeResult.NEED_MORE_INPUT;
         }
 
+        // `[96 - 127]`：Body 的**长度**。通过该长度，读取 Body 。
         // get data length.
         int len = Bytes.bytes2int(header, 12);
         checkPayload(channel, len);
 
+        // 总长度不够，返回需要更多的输入
         int tt = len + HEADER_LENGTH;
         if (readable < tt) {
             return DecodeResult.NEED_MORE_INPUT;
         }
 
+        // 解析 Header + Body
+        // 调用 #decodeBody(channel, is, header) 方法，解析 Header + Body ，根据情况，返回 Request 或 Reponse 。
+        // 🙂 逻辑上，是 #encodeRequest(...) 和 #encodeResponse(...) 方法的反向，所以，胖友就自己看啦。
         // limit input stream.
         ChannelBufferInputStream is = new ChannelBufferInputStream(buffer, len);
-
         try {
             return decodeBody(channel, is, header);
         } finally {
+            // skip 未读完的流，并打印错误日志
             if (is.available() > 0) {
                 try {
                     if (logger.isWarnEnabled()) {
@@ -207,26 +232,32 @@ public class ExchangeCodec extends TelnetCodec {
         return req.getData();
     }
 
-    protected void encodeRequest(Channel channel, ChannelBuffer buffer, Request req) throws IOException {
+    private void encodeRequest(Channel channel, ChannelBuffer buffer, Request req) throws IOException {
         Serialization serialization = getSerialization(channel);
+        // `[0, 15]`：Magic Number
         // header.
         byte[] header = new byte[HEADER_LENGTH];
         // set magic number.
         Bytes.short2bytes(MAGIC, header);
 
+        // `[16, 20]`：Serialization 编号 && `[23]`：请求。
         // set request and serialization flag.
         header[2] = (byte) (FLAG_REQUEST | serialization.getContentTypeId());
 
+        // `[22]`：`twoWay` 是否需要响应。
         if (req.isTwoWay()) {
             header[2] |= FLAG_TWOWAY;
         }
+        // `[21]`：`event` 是否为事件。
         if (req.isEvent()) {
             header[2] |= FLAG_EVENT;
         }
 
+        // `[32 - 95]`：`id` 编号，Long 型。
         // set request id.
         Bytes.long2bytes(req.getId(), header, 4);
 
+        // 编码 `Request.data` 到 Body ，并写入到 Buffer
         // encode request data.
         int savedWriteIndex = buffer.writerIndex();
         buffer.writerIndex(savedWriteIndex + HEADER_LENGTH);
@@ -237,16 +268,25 @@ public class ExchangeCodec extends TelnetCodec {
         } else {
             encodeRequestData(channel, out, req.getData(), req.getVersion());
         }
+
+        // 释放资源
         out.flushBuffer();
         if (out instanceof Cleanable) {
             ((Cleanable) out).cleanup();
         }
         bos.flush();
         bos.close();
+        // 检查 Body 长度，是否超过消息上限。
         int len = bos.writtenBytes();
+        // 会调用 #checkPayload(channel, len) 方法，校验 Body 内容的长度。笔者在这块纠结了很久，
+        // 如果过长而抛出 ExceedPayloadLimitException 异常，那么 ChannelBuffer 是否重置下写入位置。
+        // 后来发现自己煞笔了，每次 ChannelBuffer 都是新创建的，所以无需重置。
+        // 为什么 Buffer 先写入了 Body ，再写入 Header 呢？因为 Header 中，里面 [96 - 127] 的 Body 长度，需要序列化后才得到。
         checkPayload(channel, len);
+        // `[96 - 127]`：Body 的**长度**。
         Bytes.int2bytes(len, header, 12);
 
+        // 写入 Header 到 Buffer
         // write
         buffer.writerIndex(savedWriteIndex);
         buffer.writeBytes(header); // write header.

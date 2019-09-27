@@ -28,6 +28,10 @@ import org.apache.dubbo.remoting.transport.ChannelHandlerAdapter;
 
 /**
  * Exchanger facade. (API, Static, ThreadSafe)
+ * Exchangers 和 Transporters 类似。
+ *
+ * com.alibaba.dubbo.remoting.Transporters ，数据交换者门面类，参见 Facade 设计模式。
+ *
  */
 public class Exchangers {
 

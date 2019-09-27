@@ -91,6 +91,9 @@ public abstract class AbstractTimerTask implements TimerTask {
 
     protected abstract void doTask(Channel channel);
 
+    /**
+     * 用于查询获得需要心跳的通道数组
+     */
     interface ChannelProvider {
         Collection<Channel> getChannels();
     }

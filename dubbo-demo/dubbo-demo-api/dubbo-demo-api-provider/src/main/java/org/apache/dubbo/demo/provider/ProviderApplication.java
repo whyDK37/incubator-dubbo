@@ -16,26 +16,35 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.dubbo.demo.consumer;
+package org.apache.dubbo.demo.provider;
 
 import org.apache.dubbo.config.ApplicationConfig;
-import org.apache.dubbo.config.ReferenceConfig;
+import org.apache.dubbo.config.ProtocolConfig;
 import org.apache.dubbo.config.RegistryConfig;
+import org.apache.dubbo.config.ServiceConfig;
 import org.apache.dubbo.demo.DemoService;
 
-public class Application {
+public class ProviderApplication {
     /**
      * In order to make sure multicast registry works, need to specify '-Djava.net.preferIPv4Stack=true' before
      * launch the application
      */
-    public static void main(String[] args) {
-        ReferenceConfig<DemoService> reference = new ReferenceConfig<>();
-        reference.setApplication(new ApplicationConfig("dubbo-demo-api-consumer"));
-        reference.setRegistry(new RegistryConfig("multicast://224.5.6.7:1234"));
-        reference.setCheck(false);
-        reference.setInterface(DemoService.class);
-        DemoService service = reference.get();
-        String message = service.sayHello("dubbo");
-        System.out.println(message);
+    public static void main(String[] args) throws Exception {
+        RegistryConfig registry = new RegistryConfig("zookeeper://127.0.0.1:2181");
+
+        ProtocolConfig protocol = new ProtocolConfig();
+        protocol.setName("dubbo");
+        protocol.setPort(12345);
+        protocol.setThreads(200);
+
+        ServiceConfig<DemoServiceImpl> service = new ServiceConfig<>();
+        service.setApplication(new ApplicationConfig("dubbo-demo-api-provider"));
+        service.setRegistry(registry);
+        service.setProtocol(protocol);
+        service.setInterface(DemoService.class);
+        service.setRef(new DemoServiceImpl());
+//        service.setVersion("1.2.1");
+        service.export();
+        System.in.read();
     }
 }

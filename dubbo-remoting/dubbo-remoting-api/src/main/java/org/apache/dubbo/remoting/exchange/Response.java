@@ -21,8 +21,14 @@ package org.apache.dubbo.remoting.exchange;
  */
 public class Response {
 
+    /**
+     * 事件 - 心跳
+     */
     public static final String HEARTBEAT_EVENT = null;
 
+    /**
+     * 事件 - 只读
+     */
     public static final String READONLY_EVENT = "R";
 
     /**
@@ -80,16 +86,36 @@ public class Response {
      */
     public static final byte SERVER_THREADPOOL_EXHAUSTED_ERROR = 100;
 
+    /**
+     * 响应编号
+     *
+     * 一个 {@link Request#mId} 和 {@link Response#mId} 一一对应。
+     */
     private long mId = 0;
 
+    /**
+     * 版本
+     */
     private String mVersion;
 
+    /**
+     * 状态
+     */
     private byte mStatus = OK;
 
+    /**
+     * 是否事件
+     */
     private boolean mEvent = false;
 
+    /**
+     * 错误消息
+     */
     private String mErrorMsg;
 
+    /**
+     * 结果
+     */
     private Object mResult;
 
     public Response() {

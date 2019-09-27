@@ -43,30 +43,64 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * DefaultFuture.
+ * 实现 ResponseFuture 接口，默认响应 Future 实现类。
+ * 同时，它也是所有 DefaultFuture 的管理容器。
  */
 public class DefaultFuture implements ResponseFuture {
 
     private static final Logger logger = LoggerFactory.getLogger(DefaultFuture.class);
 
+    /**
+     * 通道集合
+     *
+     * key：请求编号
+     */
     private static final Map<Long, Channel> CHANNELS = new ConcurrentHashMap<>();
 
+    /**
+     * Future 集合
+     *
+     * key：请求编号
+     */
     private static final Map<Long, DefaultFuture> FUTURES = new ConcurrentHashMap<>();
 
+    /**
+     * 请求超时定时任务
+     */
     public static final Timer TIME_OUT_TIMER = new HashedWheelTimer(
             new NamedThreadFactory("dubbo-future-timeout", true),
             30,
             TimeUnit.MILLISECONDS);
 
     // invoke id.
+    /**
+     * 请求编号
+     */
     private final long id;
     private final Channel channel;
     private final Request request;
     private final int timeout;
+
     private final Lock lock = new ReentrantLock();
+    /**
+     * 请求是否完成条件
+     */
     private final Condition done = lock.newCondition();
+    /**
+     * 创建开始时间
+     */
     private final long start = System.currentTimeMillis();
+    /**
+     * 发送请求时间
+     */
     private volatile long sent;
+    /**
+     * 响应
+     */
     private volatile Response response;
+    /**
+     * 回调
+     */
     private volatile ResponseCallback callback;
 
     private DefaultFuture(Channel channel, Request request, int timeout) {
@@ -108,6 +142,11 @@ public class DefaultFuture implements ResponseFuture {
         return FUTURES.get(id);
     }
 
+    /**
+     * 判断通道是否有未结束的请求
+     * @param channel
+     * @return
+     */
     public static boolean hasFuture(Channel channel) {
         return CHANNELS.containsValue(channel);
     }
@@ -169,10 +208,16 @@ public class DefaultFuture implements ResponseFuture {
         if (timeout <= 0) {
             timeout = Constants.DEFAULT_TIMEOUT;
         }
+        // 若未完成，等待
+        // 判断是否完成。若未完成，基于 Lock + Condition 的方式，实现等待。
+        // 而等待的唤醒，通过 ChannelHandler#received(channel, message) 方法，
+        // 接收到请求时执行 DefaultFuture#received(channel, response) 方法。
         if (!isDone()) {
+            // 注意，此处使用的不是 start 属性
             long start = System.currentTimeMillis();
             lock.lock();
             try {
+                // 等待完成或超时
                 while (!isDone()) {
                     done.await(timeout, TimeUnit.MILLISECONDS);
                     if (isDone() || System.currentTimeMillis() - start > timeout) {
@@ -184,6 +229,7 @@ public class DefaultFuture implements ResponseFuture {
             } finally {
                 lock.unlock();
             }
+            // 未完成，抛出超时异常 TimeoutException
             if (!isDone()) {
                 throw new TimeoutException(sent > 0, channel, getTimeoutMessage(false));
             }
@@ -194,24 +240,27 @@ public class DefaultFuture implements ResponseFuture {
     public void cancel() {
         Response errorResult = new Response(id);
         errorResult.setErrorMessage("request future has been canceled.");
-        response = errorResult;
+        this.response = errorResult;
         FUTURES.remove(id);
         CHANNELS.remove(id);
     }
 
     @Override
     public boolean isDone() {
-        return response != null;
+        return this.response != null;
     }
 
     @Override
     public void setCallback(ResponseCallback callback) {
+        // 若已完成，调用 #invokeCallback(callback) 方法，执行回调方法。
         if (isDone()) {
             invokeCallback(callback);
         } else {
             boolean isdone = false;
+            // 获得锁。
             lock.lock();
             try {
+                // 若未完成，设置回调 callback 属性，等在 #doReceived(response) 方法中再回调。
                 if (!isDone()) {
                     this.callback = callback;
                 } else {
@@ -220,6 +269,7 @@ public class DefaultFuture implements ResponseFuture {
             } finally {
                 lock.unlock();
             }
+            // 执行回调方法。
             if (isdone) {
                 invokeCallback(callback);
             }
@@ -250,12 +300,16 @@ public class DefaultFuture implements ResponseFuture {
         }
     }
 
+    /**
+     * 回调方法
+     * @param c
+     */
     private void invokeCallback(ResponseCallback c) {
         ResponseCallback callbackCopy = c;
         if (callbackCopy == null) {
             throw new NullPointerException("callback cannot be null.");
         }
-        Response res = response;
+        Response res = this.response;
         if (res == null) {
             throw new IllegalStateException("response cannot be null. url:" + channel.getUrl());
         }
@@ -284,7 +338,7 @@ public class DefaultFuture implements ResponseFuture {
     }
 
     private Object returnFromResponse() throws RemotingException {
-        Response res = response;
+        Response res = this.response;
         if (res == null) {
             throw new IllegalStateException("response cannot be null");
         }
@@ -326,13 +380,18 @@ public class DefaultFuture implements ResponseFuture {
     }
 
     private void doReceived(Response res) {
+        // 获得锁
         lock.lock();
         try {
-            response = res;
+            // 设置响应
+            this.response = res;
+            // 调用 Condition#signal() 方法，通知，唤醒 DefaultFuture#get(..) 方法的等待。
             done.signalAll();
         } finally {
+            // 释放锁。
             lock.unlock();
         }
+        // 调用 #invokeCallback(callback) 方法，执行回调方法。
         if (callback != null) {
             invokeCallback(callback);
         }

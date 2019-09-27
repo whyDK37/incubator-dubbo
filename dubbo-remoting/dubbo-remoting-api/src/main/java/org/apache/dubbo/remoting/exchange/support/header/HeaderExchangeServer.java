@@ -49,9 +49,15 @@ public class HeaderExchangeServer implements ExchangeServer {
 
     protected final Logger logger = LoggerFactory.getLogger(getClass());
 
+    /**
+     * 服务器
+     */
     private final Server server;
     private AtomicBoolean closed = new AtomicBoolean(false);
 
+    /**
+     * 定时器线程池
+     */
     private static final HashedWheelTimer IDLE_CHECK_TIMER = new HashedWheelTimer(new NamedThreadFactory("dubbo-server-idleCheck", true), 1,
             TimeUnit.SECONDS, Constants.TICKS_PER_WHEEL);
 
@@ -121,6 +127,10 @@ public class HeaderExchangeServer implements ExchangeServer {
         server.startClose();
     }
 
+    /**
+     * 发送 READONLY 事件给所有 Client ，表示 Server 不再接收新的消息，避免不断有新的消息接收到。
+     * 广播客户端，READONLY_EVENT 事件。
+     */
     private void sendChannelReadOnlyEvent() {
         Request request = new Request();
         request.setEvent(Request.READONLY_EVENT);

@@ -49,6 +49,8 @@ public class ConsistentHashLoadBalance extends AbstractLoadBalance {
         String key = invokers.get(0).getUrl().getServiceKey() + "." + methodName;
         int identityHashCode = System.identityHashCode(invokers);
         ConsistentHashSelector<T> selector = (ConsistentHashSelector<T>) selectors.get(key);
+
+        // 如果 hash 有变化或者没有初始化 selector, 创建新的 ConsistentHashSelector
         if (selector == null || selector.identityHashCode != identityHashCode) {
             selectors.put(key, new ConsistentHashSelector<T>(invokers, methodName, identityHashCode));
             selector = (ConsistentHashSelector<T>) selectors.get(key);
@@ -70,12 +72,15 @@ public class ConsistentHashLoadBalance extends AbstractLoadBalance {
             this.virtualInvokers = new TreeMap<Long, Invoker<T>>();
             this.identityHashCode = identityHashCode;
             URL url = invokers.get(0).getUrl();
+            // hash 槽的数量, 默认 160 个
             this.replicaNumber = url.getMethodParameter(methodName, HASH_NODES, 160);
+            // hash 参数, 默认是第一个 [0] . 参数以 , 分割
             String[] index = Constants.COMMA_SPLIT_PATTERN.split(url.getMethodParameter(methodName, HASH_ARGUMENTS, "0"));
             argumentIndex = new int[index.length];
             for (int i = 0; i < index.length; i++) {
                 argumentIndex[i] = Integer.parseInt(index[i]);
             }
+            // 每个节点进行 replicaNumber/4 次 hash 计算. 一个 hash 就是一个虚拟节点, 每个 hash 对应一个真实的 invoker.
             for (Invoker<T> invoker : invokers) {
                 String address = invoker.getUrl().getAddress();
                 for (int i = 0; i < replicaNumber / 4; i++) {

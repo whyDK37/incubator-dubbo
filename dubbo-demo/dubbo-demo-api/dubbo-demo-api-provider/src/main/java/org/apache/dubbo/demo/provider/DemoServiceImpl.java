@@ -16,19 +16,31 @@
  */
 package org.apache.dubbo.demo.provider;
 
+import org.apache.dubbo.demo.DemoCallBack;
 import org.apache.dubbo.demo.DemoService;
+import org.apache.dubbo.rpc.Invoker;
 import org.apache.dubbo.rpc.RpcContext;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.net.InetSocketAddress;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class DemoServiceImpl implements DemoService {
     private static final Logger logger = LoggerFactory.getLogger(DemoServiceImpl.class);
 
+    public static Map<String, Invoker<?>> remoteInvoker = new ConcurrentHashMap<>();
+
     @Override
-    public String sayHello(String name) {
-        logger.info("Hello " + name + ", request from consumer: " + RpcContext.getContext().getRemoteAddress());
+    public String sayHello(String name, DemoCallBack callBack) {
+        InetSocketAddress remoteKey = RpcContext.getContext().getRemoteAddress();
+        logger.info("Hello " + name + ", request from consumer: " + remoteKey);
+        Invoker<?> invoker = RpcContext.getContext().getInvoker();
+        remoteInvoker.put(remoteKey.toString(), invoker);
+        callBack.call("call back from server");
         return "Hello " + name + ", response from provider: " + RpcContext.getContext().getLocalAddress();
+
     }
 
 }

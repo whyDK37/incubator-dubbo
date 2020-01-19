@@ -24,19 +24,32 @@ import org.apache.dubbo.config.RegistryConfig;
 import org.apache.dubbo.demo.DemoCallBack;
 import org.apache.dubbo.demo.DemoService;
 
-public class Application {
+import java.util.concurrent.TimeUnit;
+
+public class ConsumerApplicationMulti {
     /**
      * In order to make sure multicast registry works, need to specify '-Djava.net.preferIPv4Stack=true' before
      * launch the application
      */
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
+        RegistryConfig registry = new RegistryConfig("zookeeper://127.0.0.1:2181");
+
         ReferenceConfig<DemoService> reference = new ReferenceConfig<>();
         reference.setApplication(new ApplicationConfig("dubbo-demo-api-consumer"));
-        reference.setRegistry(new RegistryConfig("multicast://224.5.6.7:1234"));
+        reference.setRegistry(registry);
         reference.setCheck(false);
         reference.setInterface(DemoService.class);
+//        reference.setVersion("1.2.1");
+
         DemoService service = reference.get();
-        String message = service.sayHello("dubbo", (DemoCallBack) System.out::println);
-        System.out.println(message);
+        while (true) {
+            try {
+                String message = service.sayHello("dubbo", (DemoCallBack) System.out::println);
+                System.out.println(message);
+            } catch (Exception e) {
+                System.err.println(e.getMessage());
+            }
+            TimeUnit.SECONDS.sleep(30);
+        }
     }
 }

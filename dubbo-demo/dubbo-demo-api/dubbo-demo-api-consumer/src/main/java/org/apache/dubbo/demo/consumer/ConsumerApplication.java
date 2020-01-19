@@ -23,12 +23,14 @@ import org.apache.dubbo.config.ReferenceConfig;
 import org.apache.dubbo.config.RegistryConfig;
 import org.apache.dubbo.demo.DemoService;
 
+import java.io.IOException;
+
 public class ConsumerApplication {
     /**
      * In order to make sure multicast registry works, need to specify '-Djava.net.preferIPv4Stack=true' before
      * launch the application
      */
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
         RegistryConfig registry = new RegistryConfig("zookeeper://127.0.0.1:2181");
 
         ReferenceConfig<DemoService> reference = new ReferenceConfig<>();
@@ -39,7 +41,8 @@ public class ConsumerApplication {
 //        reference.setVersion("1.2.1");
 
         DemoService service = reference.get();
-        String message = service.sayHello("dubbo");
+        String message = service.sayHello("dubbo", System.out::println);
         System.out.println(message);
+        System.in.read();
     }
 }

@@ -18,11 +18,19 @@
  */
 package org.apache.dubbo.demo.provider;
 
-import org.apache.dubbo.config.ApplicationConfig;
-import org.apache.dubbo.config.ProtocolConfig;
-import org.apache.dubbo.config.RegistryConfig;
-import org.apache.dubbo.config.ServiceConfig;
+import com.google.common.collect.Lists;
+import org.apache.dubbo.common.Constants;
+import org.apache.dubbo.config.*;
 import org.apache.dubbo.demo.DemoService;
+import org.apache.dubbo.remoting.exchange.ExchangeChannel;
+import org.apache.dubbo.remoting.exchange.ExchangeServer;
+import org.apache.dubbo.rpc.RpcInvocation;
+import org.apache.dubbo.rpc.protocol.dubbo.DubboProtocol;
+
+import java.util.Collection;
+import java.util.Scanner;
+
+import static org.apache.dubbo.demo.provider.DemoServiceImpl.remoteInvoker;
 
 public class ProviderApplication {
     /**
@@ -42,9 +50,56 @@ public class ProviderApplication {
         service.setRegistry(registry);
         service.setProtocol(protocol);
         service.setInterface(DemoService.class);
+
+        MethodConfig methodConfig = new MethodConfig();
+        methodConfig.setName("sayHello");
+        ArgumentConfig argumentConfig = new ArgumentConfig();
+        argumentConfig.setIndex(1);
+        argumentConfig.setCallback(true);
+        methodConfig.setArguments(Lists.newArrayList(argumentConfig));
+        service.setMethods(Lists.newArrayList(methodConfig));
         service.setRef(new DemoServiceImpl());
-//        service.setVersion("1.2.1");
+        service.setVersion("1.2.1");
         service.export();
-        System.in.read();
+//        System.in.read();
+
+        Scanner scanner = new Scanner(System.in);
+        String input;
+        while ((input = scanner.next()) != null) {
+            if ("ls".equals(input)) {
+                Collection<ExchangeServer> servers = DubboProtocol.getDubboProtocol().getServers();
+                for (ExchangeServer server : servers) {
+                    System.out.println("server.getLocalAddress() = " + server.getLocalAddress());
+                    for (ExchangeChannel exchangeChannel : server.getExchangeChannels()) {
+                        System.out.println("exchangeChannel.getRemoteAddress() = " + exchangeChannel.getRemoteAddress());
+                    }
+                }
+
+            } else if ("iv".equals(input)) {
+                remoteInvoker.forEach((s, invoker) -> System.out.println("remote:" + s + ", invoker:" + invoker));
+            } else if ("send".equals(input)) {
+                try {
+                    ExchangeServer next = DubboProtocol.getDubboProtocol().getServers().iterator().next();
+                    ExchangeChannel exchangeChannel = next.getExchangeChannels().iterator().next();
+                    System.out.println("exchangeChannel.getClass() = " + exchangeChannel.getClass());
+                    RpcInvocation message = new RpcInvocation();
+                    message.setMethodName("sayHello");
+                    message.setArguments(new Object[]{"call from server"});
+                    message.setParameterTypes(new Class[]{String.class});
+                    message.setAttachment(Constants.SIDE_KEY, Constants.PROVIDER_SIDE);
+                    message.setAttachment(Constants.INTERFACE_KEY, "org.apache.dubbo.demo.DemoService");
+                    message.setAttachment(Constants.PATH_KEY, "org.apache.dubbo.demo.DemoService");
+                    message.setAttachment(Constants.CALLBACK_SERVICE_KEY, "org.apache.dubbo.demo.DemoService");
+                    exchangeChannel.send(message, true);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            } else if ("q".equalsIgnoreCase(input)) {
+                System.out.println("exist...");
+                break;
+            } else {
+                System.out.println("unsupported command");
+            }
+        }
     }
 }

@@ -36,7 +36,7 @@ public class Application {
         reference.setCheck(false);
         reference.setInterface(DemoService.class);
         DemoService service = reference.get();
-        String message = service.sayHello("dubbo", (DemoCallBack) System.out::println);
+        String message = service.sayHello("dubbo");
         System.out.println(message);
     }
 }

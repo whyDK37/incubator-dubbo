@@ -39,12 +39,12 @@ public class ConsumerApplicationMulti {
         reference.setRegistry(registry);
         reference.setCheck(false);
         reference.setInterface(DemoService.class);
-//        reference.setVersion("1.2.1");
+        reference.setVersion("1.2.1");
 
         DemoService service = reference.get();
         while (true) {
             try {
-                String message = service.sayHello("dubbo", (DemoCallBack) System.out::println);
+                String message = service.sayHello("dubbo");
                 System.out.println(message);
             } catch (Exception e) {
                 System.err.println(e.getMessage());

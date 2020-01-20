@@ -33,12 +33,11 @@ public class DemoServiceImpl implements DemoService {
     public static Map<String, Invoker<?>> remoteInvoker = new ConcurrentHashMap<>();
 
     @Override
-    public String sayHello(String name, DemoCallBack callBack) {
+    public String sayHello(String name) {
         InetSocketAddress remoteKey = RpcContext.getContext().getRemoteAddress();
         logger.info("Hello " + name + ", request from consumer: " + remoteKey);
         Invoker<?> invoker = RpcContext.getContext().getInvoker();
         remoteInvoker.put(remoteKey.toString(), invoker);
-        callBack.call("call back from server");
         return "Hello " + name + ", response from provider: " + RpcContext.getContext().getLocalAddress();
 
     }

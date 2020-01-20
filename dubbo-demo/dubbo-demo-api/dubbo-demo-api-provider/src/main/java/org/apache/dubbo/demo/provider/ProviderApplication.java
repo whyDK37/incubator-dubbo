@@ -18,9 +18,11 @@
  */
 package org.apache.dubbo.demo.provider;
 
-import com.google.common.collect.Lists;
 import org.apache.dubbo.common.Constants;
-import org.apache.dubbo.config.*;
+import org.apache.dubbo.config.ApplicationConfig;
+import org.apache.dubbo.config.ProtocolConfig;
+import org.apache.dubbo.config.RegistryConfig;
+import org.apache.dubbo.config.ServiceConfig;
 import org.apache.dubbo.demo.DemoService;
 import org.apache.dubbo.remoting.exchange.ExchangeChannel;
 import org.apache.dubbo.remoting.exchange.ExchangeServer;
@@ -38,26 +40,20 @@ public class ProviderApplication {
      * launch the application
      */
     public static void main(String[] args) throws Exception {
-        RegistryConfig registry = new RegistryConfig("zookeeper://127.0.0.1:2181");
-
-        ProtocolConfig protocol = new ProtocolConfig();
-        protocol.setName("dubbo");
-        protocol.setPort(12345);
-        protocol.setThreads(200);
 
         ServiceConfig<DemoServiceImpl> service = new ServiceConfig<>();
         service.setApplication(new ApplicationConfig("dubbo-demo-api-provider"));
-        service.setRegistry(registry);
-        service.setProtocol(protocol);
+        service.setRegistry(new RegistryConfig("zookeeper://127.0.0.1:2181"));
+        service.setProtocol(new ProtocolConfig("dubbo", 12345));
         service.setInterface(DemoService.class);
 
-        MethodConfig methodConfig = new MethodConfig();
-        methodConfig.setName("sayHello");
-        ArgumentConfig argumentConfig = new ArgumentConfig();
-        argumentConfig.setIndex(1);
-        argumentConfig.setCallback(true);
-        methodConfig.setArguments(Lists.newArrayList(argumentConfig));
-        service.setMethods(Lists.newArrayList(methodConfig));
+//        MethodConfig methodConfig = new MethodConfig();
+//        methodConfig.setName("sayHello");
+//        ArgumentConfig argumentConfig = new ArgumentConfig();
+//        argumentConfig.setIndex(1);
+//        argumentConfig.setCallback(true);
+//        methodConfig.setArguments(Lists.newArrayList(argumentConfig));
+//        service.setMethods(Lists.newArrayList(methodConfig));
         service.setRef(new DemoServiceImpl());
         service.setVersion("1.2.1");
         service.export();
@@ -82,15 +78,18 @@ public class ProviderApplication {
                     ExchangeServer next = DubboProtocol.getDubboProtocol().getServers().iterator().next();
                     ExchangeChannel exchangeChannel = next.getExchangeChannels().iterator().next();
                     System.out.println("exchangeChannel.getClass() = " + exchangeChannel.getClass());
-                    RpcInvocation message = new RpcInvocation();
-                    message.setMethodName("sayHello");
-                    message.setArguments(new Object[]{"call from server"});
-                    message.setParameterTypes(new Class[]{String.class});
-                    message.setAttachment(Constants.SIDE_KEY, Constants.PROVIDER_SIDE);
-                    message.setAttachment(Constants.INTERFACE_KEY, "org.apache.dubbo.demo.DemoService");
-                    message.setAttachment(Constants.PATH_KEY, "org.apache.dubbo.demo.DemoService");
-                    message.setAttachment(Constants.CALLBACK_SERVICE_KEY, "org.apache.dubbo.demo.DemoService");
-                    exchangeChannel.send(message, true);
+                    RpcInvocation invocation = new RpcInvocation();
+                    invocation.setMethodName("sayHello");
+                    invocation.setArguments(new Object[]{"call from server"});
+                    invocation.setParameterTypes(new Class[]{String.class});
+                    invocation.setAttachment(Constants.SIDE_KEY, Constants.PROVIDER_SIDE);
+                    invocation.setAttachment(Constants.INTERFACE_KEY, "org.apache.dubbo.demo.DemoService");
+                    invocation.setAttachment(Constants.PATH_KEY, "org.apache.dubbo.demo.DemoService");
+                    invocation.setAttachment(Constants.CALLBACK_SERVICE_KEY, "0");
+                    invocation.setAttachment(Constants.METHODS_KEY, "sayHello");
+                    invocation.setAttachment(Constants.METHOD_KEY, "sayHello");
+                    invocation.setAttachment("sayHello." + 0 + ".callback", "true");
+                    exchangeChannel.send(invocation, true);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }

@@ -30,13 +30,13 @@ import java.util.Map;
 /**
  * InjvmInvoker
  */
-class InjvmInvoker<T> extends AbstractInvoker<T> {
+public class InjvmInvoker<T> extends AbstractInvoker<T> {
 
     private final String key;
 
     private final Map<String, Exporter<?>> exporterMap;
 
-    InjvmInvoker(Class<T> type, URL url, String key, Map<String, Exporter<?>> exporterMap) {
+    public InjvmInvoker(Class<T> type, URL url, String key, Map<String, Exporter<?>> exporterMap) {
         super(type, url);
         this.key = key;
         this.exporterMap = exporterMap;

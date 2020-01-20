@@ -25,11 +25,14 @@ import org.apache.dubbo.config.ApplicationConfig;
 import org.apache.dubbo.config.ReferenceConfig;
 import org.apache.dubbo.config.RegistryConfig;
 import org.apache.dubbo.demo.DemoService;
+import org.apache.dubbo.remoting.exchange.ExchangeServer;
 import org.apache.dubbo.rpc.Exporter;
+import org.apache.dubbo.rpc.Invoker;
 import org.apache.dubbo.rpc.ProxyFactory;
 import org.apache.dubbo.rpc.protocol.dubbo.DubboProtocol;
 
 import java.io.IOException;
+import java.util.Collection;
 
 public class ConsumerApplication {
     private static ProxyFactory proxy = ExtensionLoader.getExtensionLoader(ProxyFactory.class).getAdaptiveExtension();
@@ -44,7 +47,7 @@ public class ConsumerApplication {
         ReferenceConfig<DemoService> reference = new ReferenceConfig<>();
         reference.setApplication(new ApplicationConfig("dubbo-demo-api-consumer"));
         reference.setRegistry(registry);
-        reference.setCheck(true);
+        reference.setCheck(false);
         reference.setInterface(DemoService.class);
         reference.setVersion("1.2.1");
 
@@ -54,6 +57,10 @@ public class ConsumerApplication {
 
         // 客户端回调服务
         DubboProtocol protocol = DubboProtocol.getDubboProtocol();
+        Collection<Invoker<?>> invokers = protocol.getInvokers();
+        Collection<ExchangeServer> servers = protocol.getServers();
+        Collection<Exporter<?>> exporters = protocol.getExporters();
+        int defaultPort = protocol.getDefaultPort();
         DemoService cliSer = new CliDemoServiceImpl();
         URL url = URL.valueOf("injvm://127.0.0.1/org.apache.dubbo.demo.DemoService")
                 .addParameter(Constants.INTERFACE_KEY, DemoService.class.getName())

@@ -26,6 +26,7 @@ import org.apache.dubbo.config.ServiceConfig;
 import org.apache.dubbo.demo.DemoService;
 import org.apache.dubbo.remoting.exchange.ExchangeChannel;
 import org.apache.dubbo.remoting.exchange.ExchangeServer;
+import org.apache.dubbo.remoting.exchange.ResponseFuture;
 import org.apache.dubbo.rpc.RpcInvocation;
 import org.apache.dubbo.rpc.protocol.dubbo.DubboProtocol;
 
@@ -89,7 +90,8 @@ public class ProviderApplication {
                     invocation.setAttachment(Constants.METHODS_KEY, "sayHello");
                     invocation.setAttachment(Constants.METHOD_KEY, "sayHello");
                     invocation.setAttachment("sayHello." + 0 + ".callback", "true");
-                    exchangeChannel.send(invocation, true);
+                    ResponseFuture resp = exchangeChannel.request(invocation, Integer.MAX_VALUE);
+                    System.out.println("request.get() = " + resp.get());
                 } catch (Exception e) {
                     e.printStackTrace();
                 }

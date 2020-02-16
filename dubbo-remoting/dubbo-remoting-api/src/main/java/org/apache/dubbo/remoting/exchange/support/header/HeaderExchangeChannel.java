@@ -16,7 +16,6 @@
  */
 package org.apache.dubbo.remoting.exchange.support.header;
 
-import org.apache.dubbo.common.Constants;
 import org.apache.dubbo.common.URL;
 import org.apache.dubbo.common.Version;
 import org.apache.dubbo.common.logger.Logger;
@@ -24,10 +23,18 @@ import org.apache.dubbo.common.logger.LoggerFactory;
 import org.apache.dubbo.remoting.Channel;
 import org.apache.dubbo.remoting.ChannelHandler;
 import org.apache.dubbo.remoting.RemotingException;
-import org.apache.dubbo.remoting.exchange.*;
+import org.apache.dubbo.remoting.exchange.ExchangeChannel;
+import org.apache.dubbo.remoting.exchange.ExchangeHandler;
+import org.apache.dubbo.remoting.exchange.Request;
+import org.apache.dubbo.remoting.exchange.Response;
 import org.apache.dubbo.remoting.exchange.support.DefaultFuture;
 
 import java.net.InetSocketAddress;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+
+import static org.apache.dubbo.common.constants.CommonConstants.DEFAULT_TIMEOUT;
+import static org.apache.dubbo.common.constants.CommonConstants.TIMEOUT_KEY;
 
 /**
  * ExchangeReceiver
@@ -39,7 +46,6 @@ final class HeaderExchangeChannel implements ExchangeChannel {
     private static final String CHANNEL_KEY = HeaderExchangeChannel.class.getName() + ".CHANNEL";
 
     /**
-     * 通道
      * 通道。HeaderExchangeChannel 是传入 channel 属性的装饰器，
      * 每个实现的方法，都会调用 channel 。如下是该属性的一个例子：
      */
@@ -59,9 +65,7 @@ final class HeaderExchangeChannel implements ExchangeChannel {
 
     /**
      * 创建 HeaderExchangeChannel 对象
-     *
      * @param ch 传入的 ch 属性，实际就是 HeaderExchangeChanel.channel 属性。
-     * @return
      */
     static HeaderExchangeChannel getOrAddChannel(Channel ch) {
         if (ch == null) {
@@ -82,11 +86,15 @@ final class HeaderExchangeChannel implements ExchangeChannel {
 
     /**
      * 移除 HeaderExchangeChannel 对象。
-     *
-     * @param ch
      */
     static void removeChannelIfDisconnected(Channel ch) {
         if (ch != null && !ch.isConnected()) {
+            ch.removeAttribute(CHANNEL_KEY);
+        }
+    }
+
+    static void removeChannel(Channel ch) {
+        if (ch != null) {
             ch.removeAttribute(CHANNEL_KEY);
         }
     }
@@ -115,13 +123,22 @@ final class HeaderExchangeChannel implements ExchangeChannel {
     }
 
     @Override
-    public ResponseFuture request(Object request) throws RemotingException {
-        return request(request, channel.getUrl().getPositiveParameter(Constants.TIMEOUT_KEY, Constants.DEFAULT_TIMEOUT));
+    public CompletableFuture<Object> request(Object request) throws RemotingException {
+        return request(request, null);
     }
 
     @Override
-    public ResponseFuture request(Object request, int timeout) throws RemotingException {
-        // 若已经关闭，不再允许发起新的请求。
+    public CompletableFuture<Object> request(Object request, int timeout) throws RemotingException {
+        return request(request, timeout, null);
+    }
+
+    @Override
+    public CompletableFuture<Object> request(Object request, ExecutorService executor) throws RemotingException {
+        return request(request, channel.getUrl().getPositiveParameter(TIMEOUT_KEY, DEFAULT_TIMEOUT), executor);
+    }
+
+    @Override
+    public CompletableFuture<Object> request(Object request, int timeout, ExecutorService executor) throws RemotingException {
         if (closed) {
             throw new RemotingException(this.getLocalAddress(), null, "Failed to send request " + request + ", cause: The channel " + this + " is closed!");
         }
@@ -132,8 +149,7 @@ final class HeaderExchangeChannel implements ExchangeChannel {
         req.setTwoWay(true);
         // 具体数据
         req.setData(request);
-        // 创建 DefaultFuture 对象
-        DefaultFuture future = DefaultFuture.newFuture(channel, req, timeout);
+        DefaultFuture future = DefaultFuture.newFuture(channel, req, timeout, executor);
         try {
             // 发送请求
             channel.send(req);
@@ -153,6 +169,8 @@ final class HeaderExchangeChannel implements ExchangeChannel {
     @Override
     public void close() {
         try {
+            // graceful close
+            DefaultFuture.closeChannel(channel);
             channel.close();
         } catch (Throwable e) {
             logger.warn(e.getMessage(), e);
@@ -163,7 +181,6 @@ final class HeaderExchangeChannel implements ExchangeChannel {
 
     /**
      * 优雅关闭
-     * @param timeout
      */
     @Override
     public void close(int timeout) {
